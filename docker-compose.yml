@@ -9,16 +9,28 @@ services:
       MYSQL_DATABASE: testdb
     ports:
       - "3307:3306"
-    command: --max-allowed-packet=256M
+    command: >
+      --max-allowed-packet=1024M
+      --innodb_log_file_size=512M
+      --innodb_log_buffer_size=256M
+      --net_buffer_length=64K
+      --max_connections=500
+      --wait_timeout=28800
+      --interactive_timeout=28800
     volumes:
       - mysql_data:/var/lib/mysql
 
-  app:
-    build: .
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: my-secret-pw
+    ports:
+      - "127.0.0.1:8080:80"  # 🔐 Sadece local erişim!
     depends_on:
       - mysql
-    volumes:
-      - ./txtler:/app/txtler
 
 volumes:
   mysql_data:

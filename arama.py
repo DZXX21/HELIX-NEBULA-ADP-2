@@ -9,22 +9,29 @@ db_config = {
     'database': 'testdb'
 }
 
-def extract_com_tr_entries():
+def extract_szutest_entries():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
 
-    query = "SELECT dosya_adi, CONVERT(icerik USING utf8mb4) FROM dosyalar WHERE CONVERT(icerik USING utf8mb4) LIKE '%.com.tr%'"
+    # Sadece "szutest.com.tr" geçen kayıtları seçiyoruz
+    query = """
+        SELECT dosya_adi,
+               CONVERT(icerik USING utf8mb4) AS metin
+          FROM dosyalar
+         WHERE CONVERT(icerik USING utf8mb4) LIKE '%szutest.com.tr%'
+    """
     cursor.execute(query)
 
-    regex = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.com\.tr|https?:\/\/[^\s\"']+\.com\.tr|www\.[^\s\"']+\.com\.tr"
+    # Sadece szutest.com.tr içeren e‑posta veya URL parçalarını yakalamak için basit regex
+    regex = r"(?:[a-zA-Z0-9._%+-]+@)?szutest\.com\.tr[^\s\"']*"
 
     toplam_eslesme = 0
     toplam_dosya = 0
 
-    print("🔍 .com.tr geçen veriler:")
+    print("🔍 'szutest.com.tr' geçen veriler:")
 
-    for dosya_adi, icerik in cursor.fetchall():
-        matches = re.findall(regex, icerik)
+    for dosya_adi, metin in cursor.fetchall():
+        matches = re.findall(regex, metin)
         if matches:
             toplam_dosya += 1
             print(f"\n📄 Dosya: {dosya_adi} ({len(matches)} eşleşme)")
@@ -33,11 +40,11 @@ def extract_com_tr_entries():
             toplam_eslesme += len(matches)
 
     print("\n📊 Özet")
-    print(f"📁 .com.tr geçen dosya sayısı: {toplam_dosya}")
+    print(f"📁 'szutest.com.tr' geçen dosya sayısı: {toplam_dosya}")
     print(f"🔢 Toplam eşleşme sayısı: {toplam_eslesme}")
 
     cursor.close()
     conn.close()
 
 if __name__ == '__main__':
-    extract_com_tr_entries()
+    extract_szutest_entries()

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domain İstatistikleri</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    function DomainStatistics() {
+      const [stats, setStats] = React.useState({
+        'com.tr': 125,
+        'szutest.com.tr': 37,
+        'tupras.com.tr': 48,
+        'bilyoner.com': 62
+      });
+      
+      const [loading, setLoading] = React.useState(false);
+      const [error, setError] = React.useState(null);
+      const chartRef = React.useRef(null);
+      const chartInstance = React.useRef(null);
+      
+      React.useEffect(() => {
+        // Normalde burada bir API'den veri çekilir
+        // fetchDomainStats();
+        createChart();
+        
+        return () => {
+          if (chartInstance.current) {
+            chartInstance.current.destroy();
+          }
+        };
+      }, []);
+      
+      const fetchDomainStats = () => {
+        setLoading(true);
+        setError(null);
+        
+        // API'den veri çekme simülasyonu
+        setTimeout(() => {
+          try {
+            // Gerçek uygulamada bu veri API'den gelecek
+            setStats({
+              'com.tr': 125,
+              'szutest.com.tr': 37,
+              'tupras.com.tr': 48,
+              'bilyoner.com': 62
+            });
+            setLoading(false);
+            createChart();
+          } catch (err) {
+            setError("Veriler yüklenirken bir hata oluştu.");
+            setLoading(false);
+          }
+        }, 1000);
+      };
+      
+      const createChart = () => {
+        if (chartRef.current) {
+          // Eğer önceki bir grafik varsa yok et
+          if (chartInstance.current) {
+            chartInstance.current.destroy();
+          }
+          
+          const ctx = chartRef.current.getContext('2d');
+          chartInstance.current = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: Object.keys(stats),
+              datasets: [{
+                label: 'Domain Sayıları',
+                data: Object.values(stats),
+                backgroundColor: [
+                  'rgba(54, 162, 235, 0.7)',
+                  'rgba(255, 99, 132, 0.7)',
+                  'rgba(255, 206, 86, 0.7)',
+                  'rgba(75, 192, 192, 0.7)'
+                ],
+                borderColor: [
+                  'rgba(54, 162, 235, 1)',
+                  'rgba(255, 99, 132, 1)',
+                  'rgba(255, 206, 86, 1)',
+                  'rgba(75, 192, 192, 1)'
+                ],
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  title: {
+                    display: true,
+                    text: 'Sayı'
+                  },
+                  ticks: {
+                    precision: 0
+                  }
+                },
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Domain Türleri'
+                  }
+                }
+              },
+              plugins: {
+                legend: {
+                  display: false
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleFont: {
+                    size: 14
+                  },
+                  bodyFont: {
+                    size: 14
+                  },
+                  callbacks: {
+                    label: function(context) {
+                      return `Sayı: ${context.parsed.y}`;
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
+      };
+      
+      const refreshData = () => {
+        fetchDomainStats();
+      };
+      
+      return (
+        <div className="min-h-screen p-4 md:p-8">
+          <div className="max-w-6xl mx-auto">
+            <header className="mb-8">
+              <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold text-gray-800">Domain İstatistikleri</h1>
+                <div className="flex space-x-4">
+                  <a href="/" className="text-blue-600 hover:text-blue-800 flex items-center">
+                    <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Ana Sayfaya Dön
+                  </a>
+                  <button 
+                    onClick={refreshData}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center text-sm"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Yükleniyor...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Yenile
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <p className="text-gray-600 mt-2">Veritabanında bulunan domain türlerinin istatistikleri</p>
+            </header>
+            
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h2 className="text-xl font-semibold mb-4 text-gray-700">Domainler</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain Türü</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sayı</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yüzde</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {Object.entries(stats).map(([domain, count], index) => {
+                        const total = Object.values(stats).reduce((a, b) => a + b, 0);
+                        const percentage = ((count / total) * 100).toFixed(1);
+                        
+                        return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{domain}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{count}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <div className="flex items-center">
+                                <span className="mr-2">{percentage}%</span>
+                                <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                                  <div 
+                                    className="h-2.5 rounded-full" 
+                                    style={{
+                                      width: `${percentage}%`,
+                                      backgroundColor: index === 0 ? '#3b82f6' : 
+                                                    index === 1 ? '#ec4899' : 
+                                                    index === 2 ? '#eab308' : 
+                                                    '#06b6d4'
+                                    }}
+                                  ></div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h2 className="text-xl font-semibold mb-4 text-gray-700">Özet İstatistikler</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-sm text-blue-600 font-medium">Toplam Domain</p>
+                    <p className="text-2xl font-bold text-blue-800">
+                      {Object.values(stats).reduce((a, b) => a + b, 0)}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-sm text-green-600 font-medium">En Yaygın</p>
+                    <p className="text-2xl font-bold text-green-800">
+                      {Object.entries(stats).sort((a, b) => b[1] - a[1])[0][0]}
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <p className="text-sm text-purple-600 font-medium">Ortalama</p>
+                    <p className="text-2xl font-bold text-purple-800">
+                      {Math.round(Object.values(stats).reduce((a, b) => a + b, 0) / Object.keys(stats).length)}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-lg">
+                    <p className="text-sm text-amber-600 font-medium">Son Güncelleme</p>
+                    <p className="text-xl font-bold text-amber-800">
+                      {new Date().toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-6 rounded-xl shadow-md mb-8">
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">Domain Dağılımı</h2>
+              <div className="h-96">
+                <canvas ref={chartRef}></canvas>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-3 text-sm text-blue-700">
+                  <p>Bu istatistikler yerel veritabanındaki domain taramalarından elde edilmiştir. Güncel veriler için "Yenile" düğmesine tıklayın.</p>
+                </div>
+              </div>
+            </div>
+            
+            <footer className="text-center text-gray-500 text-sm py-4">
+              <p>&copy; {new Date().getFullYear()} Domain Analiz - Tüm hakları saklıdır</p>
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<DomainStatistics />);
+  </script>
+</body>
+</html>
