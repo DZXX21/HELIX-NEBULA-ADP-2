@@ -9,86 +9,162 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-left-color: #2563eb;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+    }
+  </style>
 </head>
 <body class="bg-gray-50">
   <div id="root"></div>
 
   <script type="text/babel">
     function DomainStatistics() {
-      const [stats, setStats] = React.useState({
-        'com.tr': 125,
-        'szutest.com.tr': 37,
-        'tupras.com.tr': 48,
-        'bilyoner.com': 62
-      });
-      
-      const [loading, setLoading] = React.useState(false);
+      const [stats, setStats] = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
       const [error, setError] = React.useState(null);
+      const [database, setDatabase] = React.useState('');
+      const [lastUpdated, setLastUpdated] = React.useState('');
+      const [totalDomains, setTotalDomains] = React.useState(0);
+      const [useCache, setUseCache] = React.useState(true);
+      
       const chartRef = React.useRef(null);
       const chartInstance = React.useRef(null);
       
-      React.useEffect(() => {
-        // Normalde burada bir API'den veri çekilir
-        // fetchDomainStats();
-        createChart();
-        
-        return () => {
-          if (chartInstance.current) {
-            chartInstance.current.destroy();
+      // Local Storage'dan veri çekme fonksiyonu
+      const getCachedData = () => {
+        try {
+          const cachedData = localStorage.getItem('domainStatsCache');
+          if (cachedData) {
+            const data = JSON.parse(cachedData);
+            // Cache süresi kontrolü - 30 dakikalık bir önbellek
+            const cacheTime = localStorage.getItem('domainStatsCacheTime');
+            if (cacheTime && (Date.now() - parseInt(cacheTime)) < 30 * 60 * 1000) {
+              return data;
+            }
           }
-        };
+        } catch (err) {
+          console.error('Cache okuma hatası:', err);
+        }
+        return null;
+      };
+      
+      // Cache'e veri yazma fonksiyonu
+      const setCachedData = (data) => {
+        try {
+          localStorage.setItem('domainStatsCache', JSON.stringify(data));
+          localStorage.setItem('domainStatsCacheTime', Date.now().toString());
+        } catch (err) {
+          console.error('Cache yazma hatası:', err);
+        }
+      };
+      
+      React.useEffect(() => {
+        // Sayfa yüklendiğinde önce cache'e bak
+        const cachedData = getCachedData();
+        if (cachedData && useCache) {
+          setStats(cachedData.stats);
+          setDatabase(cachedData.database || 'Bilinmiyor');
+          setLastUpdated(cachedData.updated_at || '');
+          setTotalDomains(cachedData.total || 0);
+          setLoading(false);
+        } else {
+          fetchDomainStats();
+        }
       }, []);
       
-      const fetchDomainStats = () => {
+      React.useEffect(() => {
+        if (stats && !loading) {
+          createChart();
+        }
+      }, [stats, loading]);
+      
+      const fetchDomainStats = (forceRefresh = false) => {
         setLoading(true);
         setError(null);
         
-        // API'den veri çekme simülasyonu
-        setTimeout(() => {
-          try {
-            // Gerçek uygulamada bu veri API'den gelecek
-            setStats({
-              'com.tr': 125,
-              'szutest.com.tr': 37,
-              'tupras.com.tr': 48,
-              'bilyoner.com': 62
-            });
+        // Cache kullanımını pas geçmek için
+        if (forceRefresh) {
+          setUseCache(false);
+        }
+        
+        fetch('/domain-stats')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP hata! Durum: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            
+            setStats(data.stats);
+            setDatabase(data.database || 'Bilinmiyor');
+            setLastUpdated(data.updated_at || '');
+            setTotalDomains(data.total || 0);
             setLoading(false);
-            createChart();
-          } catch (err) {
-            setError("Veriler yüklenirken bir hata oluştu.");
+            
+            // Cache'e kaydet
+            setCachedData(data);
+          })
+          .catch(err => {
+            setError(`İstatistik verileri yüklenemedi: ${err.message}`);
             setLoading(false);
-          }
-        }, 1000);
+          });
+      };
+      
+      // Yenile butonu için güncellenen fonksiyon
+      const handleRefresh = () => {
+        fetchDomainStats(true); // Force refresh
       };
       
       const createChart = () => {
-        if (chartRef.current) {
-          // Eğer önceki bir grafik varsa yok et
+        if (chartRef.current && stats) {
+          // Önceki grafik varsa temizle
           if (chartInstance.current) {
             chartInstance.current.destroy();
           }
           
           const ctx = chartRef.current.getContext('2d');
+          const domainLabels = Object.keys(stats);
+          const domainCounts = Object.values(stats);
+          
+          // Renk paleti
+          const backgroundColors = [
+            'rgba(54, 162, 235, 0.7)',
+            'rgba(255, 99, 132, 0.7)',
+            'rgba(255, 206, 86, 0.7)',
+            'rgba(75, 192, 192, 0.7)',
+            'rgba(153, 102, 255, 0.7)'
+          ];
+          
+          const borderColors = [
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 99, 132, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(153, 102, 255, 1)'
+          ];
+          
           chartInstance.current = new Chart(ctx, {
             type: 'bar',
             data: {
-              labels: Object.keys(stats),
+              labels: domainLabels,
               datasets: [{
                 label: 'Domain Sayıları',
-                data: Object.values(stats),
-                backgroundColor: [
-                  'rgba(54, 162, 235, 0.7)',
-                  'rgba(255, 99, 132, 0.7)',
-                  'rgba(255, 206, 86, 0.7)',
-                  'rgba(75, 192, 192, 0.7)'
-                ],
-                borderColor: [
-                  'rgba(54, 162, 235, 1)',
-                  'rgba(255, 99, 132, 1)',
-                  'rgba(255, 206, 86, 1)',
-                  'rgba(75, 192, 192, 1)'
-                ],
+                data: domainCounts,
+                backgroundColor: backgroundColors.slice(0, domainLabels.length),
+                borderColor: borderColors.slice(0, domainLabels.length),
                 borderWidth: 1
               }]
             },
@@ -127,7 +203,10 @@
                   },
                   callbacks: {
                     label: function(context) {
-                      return `Sayı: ${context.parsed.y}`;
+                      const count = context.parsed.y;
+                      const total = domainCounts.reduce((a, b) => a + b, 0);
+                      const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+                      return `Sayı: ${count} (${percentage}%)`;
                     }
                   }
                 }
@@ -137,17 +216,112 @@
         }
       };
       
-      const refreshData = () => {
-        fetchDomainStats();
+      // En yaygın domain'i bul
+      const getMostCommonDomain = () => {
+        if (!stats) return 'Yükleniyor...';
+        
+        let maxCount = 0;
+        let mostCommonDomain = '';
+        
+        Object.entries(stats).forEach(([domain, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonDomain = domain;
+          }
+        });
+        
+        return mostCommonDomain || '-';
+      };
+      
+      // Ortalama domain sayısını hesapla
+      const getAverageDomainCount = () => {
+        if (!stats) return 0;
+        
+        const domainCounts = Object.values(stats);
+        const total = domainCounts.reduce((a, b) => a + b, 0);
+        const count = domainCounts.length;
+        
+        return count > 0 ? Math.round(total / count) : 0;
+      };
+      
+      // Son güncelleme tarihi formatını düzenle
+      const formatDate = (dateString) => {
+        if (!dateString) return 'Bilinmiyor';
+        
+        try {
+          const date = new Date(dateString);
+          return date.toLocaleString('tr-TR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch (e) {
+          return dateString;
+        }
+      };
+      
+      // Yükleme ekranı
+      if (loading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center p-8 max-w-md">
+              <div className="spinner mx-auto mb-4" style={{ width: '40px', height: '40px' }}></div>
+              <h2 className="text-xl font-semibold text-gray-700 mb-2">Domain İstatistikleri Yükleniyor</h2>
+              <p className="text-gray-500">Veritabanından veriler alınıyor...</p>
+            </div>
+          </div>
+        );
+      }
+      
+      // Hata ekranı
+      if (error) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center p-8 max-w-md bg-white rounded-xl shadow-md">
+              <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h2 className="text-xl font-semibold text-gray-700 mb-2">Bir Hata Oluştu</h2>
+              <p className="text-red-600 mb-4">{error}</p>
+              <button 
+                onClick={handleRefresh}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+              >
+                Tekrar Dene
+              </button>
+            </div>
+          </div>
+        );
+      }
+      
+      // Cache durumunu gösteren badge
+      const CacheBadge = () => {
+        const cachedTime = localStorage.getItem('domainStatsCacheTime');
+        if (!cachedTime) return null;
+        
+        const cacheDate = new Date(parseInt(cachedTime));
+        const now = new Date();
+        const diffMinutes = Math.floor((now - cacheDate) / (1000 * 60));
+        
+        return (
+          <div className="bg-yellow-100 text-yellow-800 text-xs font-medium ml-2 px-2.5 py-0.5 rounded-full flex items-center">
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Önbellek: {diffMinutes} dk önce
+          </div>
+        );
       };
       
       return (
         <div className="min-h-screen p-4 md:p-8">
           <div className="max-w-6xl mx-auto">
             <header className="mb-8">
-              <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-800">Domain İstatistikleri</h1>
-                <div className="flex space-x-4">
+              <div className="flex flex-col md:flex-row justify-between md:items-center">
+                <h1 className="text-3xl font-bold text-gray-800 mb-4 md:mb-0">Domain İstatistikleri</h1>
+                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                   <a href="/" className="text-blue-600 hover:text-blue-800 flex items-center">
                     <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
@@ -155,91 +329,75 @@
                     Ana Sayfaya Dön
                   </a>
                   <button 
-                    onClick={refreshData}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center text-sm"
-                    disabled={loading}
+                    onClick={handleRefresh}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center text-sm justify-center"
                   >
-                    {loading ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Yükleniyor...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Yenile
-                      </>
-                    )}
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Verileri Yenile
                   </button>
                 </div>
               </div>
-              <p className="text-gray-600 mt-2">Veritabanında bulunan domain türlerinin istatistikleri</p>
-            </header>
-            
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-md">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
+              <div className="flex flex-wrap items-center mt-2">
+                <div className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                  Veritabanı: {database}
                 </div>
+                <div className="bg-blue-100 text-blue-800 text-xs font-medium ml-2 px-2.5 py-0.5 rounded-full">
+                  Son Güncelleme: {formatDate(lastUpdated)}
+                </div>
+                <CacheBadge />
               </div>
-            )}
+            </header>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <div className="bg-white p-6 rounded-xl shadow-md">
                 <h2 className="text-xl font-semibold mb-4 text-gray-700">Domainler</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain Türü</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sayı</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yüzde</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {Object.entries(stats).map(([domain, count], index) => {
-                        const total = Object.values(stats).reduce((a, b) => a + b, 0);
-                        const percentage = ((count / total) * 100).toFixed(1);
-                        
-                        return (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{domain}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{count}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <div className="flex items-center">
-                                <span className="mr-2">{percentage}%</span>
-                                <div className="w-24 bg-gray-200 rounded-full h-2.5">
-                                  <div 
-                                    className="h-2.5 rounded-full" 
-                                    style={{
-                                      width: `${percentage}%`,
-                                      backgroundColor: index === 0 ? '#3b82f6' : 
-                                                    index === 1 ? '#ec4899' : 
-                                                    index === 2 ? '#eab308' : 
-                                                    '#06b6d4'
-                                    }}
-                                  ></div>
+                {stats ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain Türü</th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sayı</th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yüzde</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {Object.entries(stats).map(([domain, count], index) => {
+                          const percentage = totalDomains > 0 ? ((count / totalDomains) * 100).toFixed(1) : '0.0';
+                          
+                          return (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{domain}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{count}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <div className="flex items-center">
+                                  <span className="mr-2">{percentage}%</span>
+                                  <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                                    <div 
+                                      className="h-2.5 rounded-full" 
+                                      style={{
+                                        width: `${percentage}%`,
+                                        backgroundColor: index === 0 ? '#3b82f6' : 
+                                                     index === 1 ? '#ec4899' : 
+                                                     index === 2 ? '#eab308' : 
+                                                     '#06b6d4'
+                                      }}
+                                    ></div>
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">Veri bulunamadı.</p>
+                )}
               </div>
               
               <div className="bg-white p-6 rounded-xl shadow-md">
@@ -248,25 +406,25 @@
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <p className="text-sm text-blue-600 font-medium">Toplam Domain</p>
                     <p className="text-2xl font-bold text-blue-800">
-                      {Object.values(stats).reduce((a, b) => a + b, 0)}
+                      {totalDomains}
                     </p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-lg">
                     <p className="text-sm text-green-600 font-medium">En Yaygın</p>
-                    <p className="text-2xl font-bold text-green-800">
-                      {Object.entries(stats).sort((a, b) => b[1] - a[1])[0][0]}
+                    <p className="text-xl font-bold text-green-800 truncate">
+                      {getMostCommonDomain()}
                     </p>
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg">
                     <p className="text-sm text-purple-600 font-medium">Ortalama</p>
                     <p className="text-2xl font-bold text-purple-800">
-                      {Math.round(Object.values(stats).reduce((a, b) => a + b, 0) / Object.keys(stats).length)}
+                      {getAverageDomainCount()}
                     </p>
                   </div>
                   <div className="bg-amber-50 p-4 rounded-lg">
-                    <p className="text-sm text-amber-600 font-medium">Son Güncelleme</p>
-                    <p className="text-xl font-bold text-amber-800">
-                      {new Date().toLocaleDateString('tr-TR')}
+                    <p className="text-sm text-amber-600 font-medium">Veritabanı</p>
+                    <p className="text-xl font-bold text-amber-800 truncate">
+                      {database}
                     </p>
                   </div>
                 </div>
@@ -288,7 +446,7 @@
                   </svg>
                 </div>
                 <div className="ml-3 text-sm text-blue-700">
-                  <p>Bu istatistikler yerel veritabanındaki domain taramalarından elde edilmiştir. Güncel veriler için "Yenile" düğmesine tıklayın.</p>
+                  <p>Bu istatistikler veritabanından alınmıştır. Sayfa ilk açılışta önbellekteki veriyi kullanır (30 dakika geçerli). En güncel verileri görmek için "Verileri Yenile" düğmesine tıklayın.</p>
                 </div>
               </div>
             </div>

@@ -109,66 +109,57 @@ def domain_stats():
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
-        
+
         try:
-            # İstatistikleri toplamak için sonuç sözlüğü
+            # 1️⃣ Sayaçlar
             stats = {
                 'com.tr': 0,
                 'szutest.com.tr': 0,
                 'tupras.com.tr': 0,
-                'bilyoner.com': 0
+                'bilyoner.com': 0,
             }
-            
-            # Tüm içeriği al
-            cursor.execute("SELECT icerik FROM dosyalar")
-            rows = cursor.fetchall()
-            
-            # Her bir domain türü için sayıları hesapla
-            for row in rows:
-                content = row['icerik']
-                
-                if content:
-                    
-                    
-                    # szutest.com.tr domainlerini say
-                    szutest_pattern = r'(?<![a-zA-Z0-9-])(szutest\.com\.tr|[a-zA-Z0-9-]+\.szutest\.com\.tr)(?![a-zA-Z0-9-])'
-                    szutest_matches = re.findall(szutest_pattern, content, re.IGNORECASE)
-                    stats['szutest.com.tr'] += len(szutest_matches)
-                    
-                    # tupras.com.tr domainlerini say
-                    tupras_pattern = r'(?<![a-zA-Z0-9-])(tupras\.com\.tr|[a-zA-Z0-9-]+\.tupras\.com\.tr)(?![a-zA-Z0-9-])'
-                    tupras_matches = re.findall(tupras_pattern, content, re.IGNORECASE)
-                    stats['tupras.com.tr'] += len(tupras_matches)
-                    
-                    # bilyoner.com domainlerini say
-                    bilyoner_pattern = r'(?<![a-zA-Z0-9-])(bilyoner\.com|[a-zA-Z0-9-]+\.bilyoner\.com)(?![a-zA-Z0-9-])'
-                    bilyoner_matches = re.findall(bilyoner_pattern, content, re.IGNORECASE)
-                    stats['bilyoner.com'] += len(bilyoner_matches)
-            
-            # En son güncellenme zamanı
-            cursor.execute("SELECT NOW() as current_time")
-            current_time = cursor.fetchone()['current_time']
-            
-            # Toplam domain sayısı
+
+            # 2️⃣ Tüm içerikleri UTF‑8 olarak çek
+            cursor.execute("SELECT CONVERT(icerik USING utf8mb4) AS icerik FROM dosyalar")
+
+            # 3️⃣ Regex’leri derle (performans için)
+            pattern_all   = re.compile(r'(?<![a-zA-Z0-9-])(?:[a-zA-Z0-9-]+\.)*com\.tr(?![a-zA-Z0-9-])', re.I)
+            pattern_sz    = re.compile(r'(?<![a-zA-Z0-9-])(?:[a-zA-Z0-9-]+\.)?szutest\.com\.tr(?![a-zA-Z0-9-])', re.I)
+            pattern_tu    = re.compile(r'(?<![a-zA-Z0-9-])(?:[a-zA-Z0-9-]+\.)?tupras\.com\.tr(?![a-zA-Z0-9-])', re.I)
+            pattern_bily  = re.compile(r'(?<![a-zA-Z0-9-])(?:[a-zA-Z0-9-]+\.)?bilyoner\.com(?![a-zA-Z0-9-])', re.I)
+
+            for row in cursor:
+                raw = row['icerik'] or ''
+                # bytes geldiyse güvenli decode
+                if isinstance(raw, (bytes, bytearray)):
+                    raw = raw.decode('utf-8', errors='ignore')
+
+                stats['com.tr']         += len(pattern_all.findall(raw))
+                stats['szutest.com.tr'] += len(pattern_sz.findall(raw))
+                stats['tupras.com.tr']  += len(pattern_tu.findall(raw))
+                stats['bilyoner.com']   += len(pattern_bily.findall(raw))
+
             total_domains = sum(stats.values())
-            
+
+            # Güncel zaman
+            cursor.execute("SELECT NOW() AS ts")
+            updated_at = cursor.fetchone()['ts']
+
             return jsonify({
                 'stats': stats,
                 'total': total_domains,
-                'updated_at': current_time.isoformat() if current_time else None,
+                'updated_at': updated_at.isoformat(),
                 'database': conn.database
             }), 200
-            
+
         finally:
             cursor.close()
             conn.close()
-            
-    except Error as e:
-        logger.error(f"Domain istatistikleri hesaplanırken veritabanı hatası: {e}")
-        return jsonify(error=f"Veritabanı hatası: {str(e)}"), 500
+
     except Exception as e:
-        logger.error(f"Domain istatistikleri hesaplanırken beklenmeyen hata: {e}")
-        return jsonify(error="İstatistikler hesaplanırken bir hata oluştu"), 500
+        # Tam stack trace için
+        logger.exception("Domain istatistikleri hesaplanırken hata oluştu")
+        return jsonify(error=str(e)), 500
 
 # Sağlık kontrolü endpoint'i
 @app.route('/health', methods=['GET'])

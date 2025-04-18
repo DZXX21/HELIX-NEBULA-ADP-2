@@ -23,14 +23,15 @@ def ensure_table(cursor):
 
 def insert_file(cursor, filename, filepath):
     """Tek bir dosyayı okuyup INSERT IGNORE ile veritabanına ekler."""
-    with open(filepath, 'rb') as f:
-        content = f.read()
-
     try:
+        with open(filepath, 'rb') as f:
+            content = f.read()
+
         cursor.execute(
             "INSERT IGNORE INTO dosyalar (dosya_adi, icerik) VALUES (%s, %s)",
             (filename, content)
         )
+
         if cursor.rowcount:
             print(f"✅ '{filename}' eklendi ({len(content)} bytes).")
             return True
@@ -46,40 +47,44 @@ def insert_file(cursor, filename, filepath):
         return False
 
 def insert_all_txt_files(directory_path):
+    conn = None
+    cursor = None
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         ensure_table(cursor)
         print("🔧 Tablo hazır.")
 
-        for entry in os.scandir(directory_path):
-            if not entry.is_file() or not entry.name.lower().endswith('.txt'):
-                continue
+        txt_files = [entry for entry in os.scandir(directory_path) if entry.is_file() and entry.name.lower().endswith('.txt')]
 
+        if not txt_files:
+            print("📭 Hiç .txt dosyası bulunamadı.")
+            return
+
+        for entry in txt_files:
             filename = entry.name
             filepath = entry.path
 
             if insert_file(cursor, filename, filepath):
-                conn.commit()  # commit işlemi
+                conn.commit()
                 try:
                     os.remove(filepath)
                     print(f"🗑️ '{filename}' silindi.")
                 except Exception as rm_err:
                     print(f"⚠️ '{filename}' silinirken hata: {rm_err}")
+            else:
+                conn.rollback()
 
-        print("🎉 İşlem tamamlandı.")
+        print("🎉 Tüm işlemler tamamlandı.")
 
     except Error as e:
         print("❌ Genel MySQL bağlantı hatası:", e)
     finally:
-        try:
-            if cursor:
-                cursor.close()
-            if conn and conn.is_connected():
-                conn.close()
-        except:
-            pass
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
 
 if __name__ == '__main__':
-    klasor_yolu = r"C:\Users\taha.ozen\Documents\GitHub\HELIX-NEBULA-ADP-2\veri"
+    klasor_yolu = "/home/dzx/Belgeler/GitHub/HELIX-NEBULA-ADP-2/veri"
     insert_all_txt_files(klasor_yolu)
